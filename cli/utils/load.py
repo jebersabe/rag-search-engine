@@ -2,7 +2,7 @@
 import json
 
 
-def load_and_prep_data(file_path: str) -> list[dict]:
+def load_movies(file_path: str) -> list[dict]:
     with open(file_path, "r", encoding="utf-8") as f:
         data: str = f.read()
 
