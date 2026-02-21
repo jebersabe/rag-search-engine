@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-
 import math
 import pickle
 import string
 from collections import Counter, defaultdict
 
 from config import (
+    BM25_K1,
     CACHE_PATH,
     DATA_PATH,
     DOCMAP_CACHE_PATH,
@@ -65,6 +65,14 @@ class InvertedIndex:
             + 1
         )
         return bm25_idf
+
+    def get_bm25_tf(self, doc_id, term, k1=BM25_K1):
+        if len(term.split()) > 1:
+            raise ValueError(f"Method accepts only 1 term. Was given {term.split()}")
+        token: str = tokenize(term)[0]
+        tf = self.get_tf(doc_id, token)
+        bm25_tf_score = (tf * (k1 + 1)) / (tf + k1)
+        return bm25_tf_score
 
     def build(self):
         movies: list[dict] = load_movies(str(DATA_PATH))
