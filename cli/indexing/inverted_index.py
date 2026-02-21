@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import math
 import pickle
 import string
 from collections import Counter, defaultdict
@@ -44,6 +45,27 @@ class InvertedIndex:
         doc_ids: set[int] = self.index.get(term.lower(), set())
         return sorted(list(doc_ids))
 
+    def get_tf(self, doc_id, term) -> int:
+        token = tokenize(term)
+        if len(token) > 1:
+            raise ValueError(f"Method only accepts 1 token, was given {len(token)}")
+        freq = self.term_frequency[doc_id][token[0]]
+        return freq
+
+    def get_bm25_idf(self, term) -> float:
+        if len(term.split()) > 1:
+            raise ValueError(f"Method accepts only 1 term. Was given {term.split()}")
+        token: str = tokenize(term)[0]
+        total_doc_count: int = len(self.docmap.keys())
+        term_match_doc_count: int = len(self.index[token])
+
+        bm25_idf = math.log(
+            (total_doc_count - term_match_doc_count + 0.5)
+            / (term_match_doc_count + 0.5)
+            + 1
+        )
+        return bm25_idf
+
     def build(self):
         movies: list[dict] = load_movies(str(DATA_PATH))
         for movie in movies:
@@ -52,13 +74,6 @@ class InvertedIndex:
                 doc_id=doc_id, text=f"{movie['title']} {movie['description']}"
             )
             self.docmap[doc_id] = f"{movie['title']} {movie['description']}"
-
-    def get_tf(self, doc_id, term) -> int:
-        token = tokenize(term)
-        if len(token) > 1:
-            raise ValueError(f"Method only accepts 1 token, was given {len(token)}")
-        freq = self.term_frequency[doc_id][token[0]]
-        return freq
 
     def save(self):
         CACHE_PATH.mkdir(parents=True, exist_ok=True)

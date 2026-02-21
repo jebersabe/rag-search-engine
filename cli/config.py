@@ -9,3 +9,4 @@ STOPWORDS_PATH = PROJECT_DIR / "data/stopwords.txt"
 INDEX_CACHE_PATH = PROJECT_DIR / "cache/index.pkl"
 DOCMAP_CACHE_PATH = PROJECT_DIR / "cache/docmap.pkl"
 TF_CACHE_PATH = PROJECT_DIR / "cache/term_frequency.pkl"
+BM25_K1 = 1.5
