@@ -5,9 +5,11 @@ import string
 from collections import Counter, defaultdict
 
 from config import (
+    BM25_B,
     BM25_K1,
     CACHE_PATH,
     DATA_PATH,
+    DOC_LENGTHS_CACHE_PATH,
     DOCMAP_CACHE_PATH,
     INDEX_CACHE_PATH,
     STOPWORDS_PATH,
@@ -34,12 +36,19 @@ class InvertedIndex:
         self.index: dict[str, set[int]] = defaultdict(set)
         self.docmap: dict[int, str] = {}
         self.term_frequency: dict[int, Counter] = {}
+        self.doc_lengths: dict[int, int] = {}
 
     def __add_document(self, doc_id: int, text: str):
         tokens: list[str] = tokenize(text)
+        self.doc_lengths[doc_id] = len(tokens)
         self.term_frequency[doc_id] = Counter(tokens)
         for token in set(tokens):
             self.index[token].add(doc_id)
+
+    def __get_avg_doc_length(self) -> float:
+        if len(self.doc_lengths) == 0:
+            return float(0)
+        return float(sum(self.doc_lengths.values()) / len(self.doc_lengths))
 
     def get_documents(self, term) -> list[int]:
         doc_ids: set[int] = self.index.get(term.lower(), set())
@@ -66,13 +75,32 @@ class InvertedIndex:
         )
         return bm25_idf
 
-    def get_bm25_tf(self, doc_id, term, k1=BM25_K1):
+    def get_bm25_tf(self, doc_id, term, k1=BM25_K1, b=BM25_B):
         if len(term.split()) > 1:
             raise ValueError(f"Method accepts only 1 term. Was given {term.split()}")
+        length_norm = (
+            1 - b + b * (self.doc_lengths[doc_id] / self.__get_avg_doc_length())
+        )
         token: str = tokenize(term)[0]
         tf = self.get_tf(doc_id, token)
-        bm25_tf_score = (tf * (k1 + 1)) / (tf + k1)
+        bm25_tf_score = (tf * (k1 + 1)) / (tf + k1 * length_norm)
         return bm25_tf_score
+
+    def bm25(self, doc_id: int, term: str) -> float:
+        bm25_score: float = self.get_bm25_idf(term) * self.get_bm25_tf(doc_id, term)
+        return bm25_score
+
+    def bm25_search(self, query, limit) -> list:
+        tokens: list[str] = tokenize(query)
+        scores = defaultdict(float)  # doc_id -> bm25 score
+        for token in tokens:
+            for doc_id in self.index[token]:
+                scores[doc_id] += self.bm25(doc_id, token)
+
+        sorted_scores: list[tuple] = sorted(
+            scores.items(), key=lambda item: item[1], reverse=True
+        )
+        return sorted_scores[:limit]
 
     def build(self):
         movies: list[dict] = load_movies(str(DATA_PATH))
@@ -81,7 +109,7 @@ class InvertedIndex:
             self.__add_document(
                 doc_id=doc_id, text=f"{movie['title']} {movie['description']}"
             )
-            self.docmap[doc_id] = f"{movie['title']} {movie['description']}"
+            self.docmap[doc_id] = f"{movie['title']}\n{movie['description']}"
 
     def save(self):
         CACHE_PATH.mkdir(parents=True, exist_ok=True)
@@ -95,6 +123,9 @@ class InvertedIndex:
         with open(TF_CACHE_PATH, "wb") as f:
             pickle.dump(self.term_frequency, f)
 
+        with open(DOC_LENGTHS_CACHE_PATH, "wb") as f:
+            pickle.dump(self.doc_lengths, f)
+
     def load(self):
         try:
             with open(INDEX_CACHE_PATH, "rb") as file:
@@ -105,6 +136,9 @@ class InvertedIndex:
 
             with open(TF_CACHE_PATH, "rb") as file:
                 self.term_frequency = pickle.load(file)
+
+            with open(DOC_LENGTHS_CACHE_PATH, "rb") as file:
+                self.doc_lengths = pickle.load(file)
 
         except FileNotFoundError as err:
             raise FileNotFoundError(f"No cache data found: {err}")

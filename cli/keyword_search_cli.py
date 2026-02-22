@@ -3,7 +3,7 @@ import argparse
 import math
 import string
 
-from config import BM25_K1, DATA_PATH, STOPWORDS_PATH
+from config import BM25_B, BM25_K1, DATA_PATH, STOPWORDS_PATH
 from indexing.inverted_index import InvertedIndex, tokenize
 from nltk.stem import PorterStemmer
 from utils.load import load_movies, load_stopwords
@@ -68,9 +68,11 @@ def bm25_idf_command(term: str, inverted_index: InvertedIndex) -> float:
     return bm25_score
 
 
-def bm25_tf_command(doc_id: int, term: str, inverted_index: InvertedIndex, k1=BM25_K1):
+def bm25_tf_command(
+    doc_id: int, term: str, inverted_index: InvertedIndex, k1=BM25_K1, b=BM25_B
+):
     inverted_index.load()
-    bm25_tf_score = inverted_index.get_bm25_tf(doc_id, term)
+    bm25_tf_score = inverted_index.get_bm25_tf(doc_id, term, k1, b)
     return bm25_tf_score
 
 
@@ -111,6 +113,15 @@ def main() -> None:
     bm25_tf_parser.add_argument(
         "k1", type=float, nargs="?", default=BM25_K1, help="Tunable BM25 K1 parameter"
     )
+    bm25_tf_parser.add_argument(
+        "b", type=float, nargs="?", default=BM25_B, help="Tunable BM25 b parameter"
+    )
+
+    bm25search_parser = subparsers.add_parser(
+        "bm25search", help="Search movies using full BM25 scoring"
+    )
+    bm25search_parser.add_argument("query", type=str, help="Search query")
+    bm25search_parser.add_argument("--limit", type=int, default=5, help="Limit results")
 
     args = parser.parse_args()
 
@@ -153,10 +164,19 @@ def main() -> None:
             bm25_score = bm25_idf_command(term=args.term, inverted_index=inverted_index)
             print(f"BM25 IDF score of '{args.term}': {bm25_score:.2f}")
         case "bm25tf":
-            bm25_tf_score = bm25_tf_command(args.doc_id, args.term, inverted_index)
+            bm25_tf_score = bm25_tf_command(
+                args.doc_id, args.term, inverted_index, args.k1, args.b
+            )
             print(
                 f"BM25 TF score of '{args.term}' in document '{args.doc_id}': {bm25_tf_score:.2f}"
             )
+        case "bm25search":
+            inverted_index.load()
+            results = inverted_index.bm25_search(args.query, args.limit)
+            load_movies(DATA_PATH)
+            for doc_id, score in results:
+                title = inverted_index.docmap[doc_id].split("\n")[0]
+                print(f"({doc_id}) {title} - Score: {score:.2f}")
         case _:
             parser.print_help()
 
