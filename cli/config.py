@@ -10,5 +10,6 @@ INDEX_CACHE_PATH = PROJECT_DIR / "cache/index.pkl"
 DOCMAP_CACHE_PATH = PROJECT_DIR / "cache/docmap.pkl"
 TF_CACHE_PATH = PROJECT_DIR / "cache/term_frequency.pkl"
 DOC_LENGTHS_CACHE_PATH = PROJECT_DIR / "cache/doc_lengths.pkl"
+EMBEDDINGS_CACHE_PATH = PROJECT_DIR / "cache/movie_embeddings.npy"
 BM25_K1 = 1.5
 BM25_B = 0.75
