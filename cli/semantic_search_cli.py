@@ -31,6 +31,12 @@ def main():
     search_parser.add_argument("query", type=str, help="Describe the movie you want")
     search_parser.add_argument("--limit", type=int, default=5, help="Results limit")
 
+    chunk_parser = subparsers.add_parser("chunk", help="Chunk text before embedding")
+    chunk_parser.add_argument("text", type=str, help="The text to be chunked")
+    chunk_parser.add_argument(
+        "--chunk-size", type=int, default=200, help="Number of words for chunking"
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -51,7 +57,17 @@ def main():
                 print(
                     f"{i}. {res.get('title')} ({res.get('score')})\n{res.get('description')[:100]}"
                 )
-
+        case "chunk":
+            text_splits: list[str] = args.text.split()
+            start: int = 0
+            end: int = args.chunk_size
+            counter: int = 1
+            print(f"Chunking {len(args.text)} characters")
+            while start < len(text_splits):
+                print(f"{counter}. {' '.join(text_splits[start:end])}")
+                counter += 1
+                start += args.chunk_size
+                end += args.chunk_size
         case _:
             parser.print_help()
 
