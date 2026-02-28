@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import re
 
 from config import DATA_PATH
 from lib.semantic_search import (
@@ -36,6 +37,23 @@ def main():
     chunk_parser.add_argument(
         "--chunk-size", type=int, default=200, help="Number of words for chunking"
     )
+    chunk_parser.add_argument(
+        "--overlap", type=int, default=0, help="Number of words overlap between chunks"
+    )
+
+    semantic_chunk_parser = subparsers.add_parser(
+        "semantic_chunk", help="Chunk texts with respect to semantic structure"
+    )
+    semantic_chunk_parser.add_argument("text", type=str, help="The text to be chunked")
+    semantic_chunk_parser.add_argument(
+        "--max-chunk-size",
+        type=int,
+        default=4,
+        help="Max number of sentences per chunk",
+    )
+    semantic_chunk_parser.add_argument(
+        "--overlap", type=int, default=0, help="Number sentences overlap"
+    )
 
     args = parser.parse_args()
 
@@ -64,10 +82,31 @@ def main():
             counter: int = 1
             print(f"Chunking {len(args.text)} characters")
             while start < len(text_splits):
-                print(f"{counter}. {' '.join(text_splits[start:end])}")
+                if start == 0:
+                    start_overlap = 0
+                else:
+                    start_overlap: int = start - args.overlap
+                print(f"{counter}. {' '.join(text_splits[start_overlap:end])}")
                 counter += 1
                 start += args.chunk_size
                 end += args.chunk_size
+        case "semantic_chunk":
+            pattern = r"(?<=[.!?])\s+"
+            sentences: list[str] = re.split(pattern, args.text)
+
+            start: int = 0
+            end: int = args.max_chunk_size
+            counter: int = 1
+            print(f"Semantically chunking {len(args.text)} characters")
+            while start < len(sentences):
+                if start == 0:
+                    start_overlap = 0
+                else:
+                    start_overlap: int = start - args.overlap
+                print(f"{counter}. {' '.join(sentences[start_overlap:end])}")
+                counter += 1
+                start += args.max_chunk_size
+                end += args.max_chunk_size
         case _:
             parser.print_help()
 
