@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import json
 import re
+from collections import defaultdict
 
 import numpy as np
 from config import (
@@ -17,7 +18,7 @@ class SemanticSearch:
     def __init__(self, model_name="all-MiniLM-L6-v2"):
         self.model = SentenceTransformer(model_name)
         self.embeddings: list = None
-        self.documents: list[dict] = None
+        self.documents: list[dict] = []
         self.document_map = dict()
 
     def generate_embedding(self, text):
@@ -78,7 +79,7 @@ class SemanticSearch:
 class ChunkedSemanticSearch(SemanticSearch):
     def __init__(self, model_name="all-MiniLM-L6-v2") -> None:
         super().__init__(model_name)
-        self.chunk_embeddings = None
+        self.chunk_embeddings: np.ndarray
         self.chunk_metadata: list[dict] = []
 
     def build_chunk_embeddings(self, documents):
@@ -117,12 +118,51 @@ class ChunkedSemanticSearch(SemanticSearch):
             and CHUNK_EMBEDDINGS_CACHE_PATH.is_file()
         ):
             with open(CHUNK_METADATA_CACHE_PATH, "r") as f:
-                self.chunk_metadata = json.load(f)
+                metadata = json.load(f)
+                self.chunk_metadata = metadata["chunks"]
 
             self.chunk_embeddings = np.load(CHUNK_EMBEDDINGS_CACHE_PATH)
             return self.chunk_embeddings
 
         return self.build_chunk_embeddings(documents)
+
+    def search_chunks(self, query: str, limit: int = 10):
+        q_embed = self.generate_embedding(query)
+        chunk_score: list[dict] = []  # scores of all 72k chunks
+        for cidx, embed in enumerate(self.chunk_embeddings):
+            score = cosine_similarity(embed, q_embed)
+            midx = self.chunk_metadata[cidx]["movie_idx"]
+            chunk_score.append(
+                {
+                    "chunk_idx": cidx,
+                    "movie_idx": midx,
+                    "score": score,
+                }
+            )
+
+        movie_score = defaultdict(float)  # movie_idx -> score (5000 movies)
+        for cs in chunk_score:
+            mov_idx = cs["movie_idx"]
+            new_score = cs["score"]
+            if new_score > movie_score[mov_idx]:
+                movie_score[mov_idx] = new_score
+
+        sorted_movie_score = sorted(
+            movie_score.items(), key=lambda x: x[1], reverse=True
+        )
+        top_movies = sorted_movie_score[:limit]  # (mov_idx, score)
+        top_results: list[dict] = []
+        for idx, sim_score in top_movies:
+            top_results.append(
+                {
+                    "id": idx,
+                    "title": self.documents[idx].get("title"),
+                    "document": self.documents[idx]["description"][:100],
+                    "score": round(sim_score, 2),
+                    "metadata": self.chunk_metadata[idx] or {},
+                }
+            )
+        return top_results
 
 
 def verify_model():
@@ -171,13 +211,21 @@ def cosine_similarity(vec1, vec2):
 
 def semantic_chunk(text, max_chunk_size, overlap) -> list[str]:
     pattern = r"(?<=[.!?])\s+"
+    text = text.strip()
+    if text == "":
+        return []
     sentences: list[str] = re.split(pattern, text)
+    sentences = [sentence.strip() for sentence in sentences if sentence.strip() != ""]
+    if not sentences:
+        return []
+    if len(sentences) == 1 and sentences[0][-1] in (".", "!", "?"):
+        return sentences
     chunks: list[str] = []
     step_size = max_chunk_size - overlap
 
     for i in range(0, len(sentences), step_size):
         chunk_sentences = sentences[i : i + max_chunk_size]
+        chunks.append(" ".join(chunk_sentences))
         if len(chunk_sentences) <= overlap:
             break
-        chunks.append(" ".join(chunk_sentences))
     return chunks

@@ -58,6 +58,14 @@ def main():
 
     subparsers.add_parser("embed_chunks", help="Embed chunks")
 
+    search_chunked_parser = subparsers.add_parser(
+        "search_chunked", help="Search chunks"
+    )
+    search_chunked_parser.add_argument("query", type=str, help="Query")
+    search_chunked_parser.add_argument(
+        "--limit", type=int, default=5, help="Limit top results"
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -95,13 +103,21 @@ def main():
                 end += args.chunk_size
         case "semantic_chunk":
             chunks = semantic_chunk(args.text, args.max_chunk_size, args.overlap)
-            for chunk in chunks:
-                print(chunk)
+            for i, chunk in enumerate(chunks, start=1):
+                print(f"{i}. {chunk}")
         case "embed_chunks":
             movies = load_movies(DATA_PATH)
             css = ChunkedSemanticSearch()
             embeddings = css.load_or_create_chunk_embeddings(movies)
             print(f"Generated {len(embeddings)} chunked embeddings")
+        case "search_chunked":
+            movies = load_movies(DATA_PATH)
+            css = ChunkedSemanticSearch()
+            embeddings = css.load_or_create_chunk_embeddings(movies)
+            results = css.search_chunks(args.query, args.limit)
+            for i, res in enumerate(results, start=1):
+                print(f"\n{i}. {res['title']} (score: {res['score']:.4f})")
+                print(f"   {res['document']}...")
         case _:
             parser.print_help()
 
